@@ -1,0 +1,6 @@
+{
+  "name": "EduKasir — Sistem Pembayaran Sekolah",
+  "description": "Platform pembayaran sekolah multi-tenant terpadu untuk SPP bulanan, daftar ulang, jemputan, dan tagihan manual dengan dukungan Kasir Tunai, Virtual Account, QRIS, serta laporan Excel dan PDF A4.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

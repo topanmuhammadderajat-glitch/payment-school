@@ -1,0 +1,245 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated user profile synchronized from Google Sign-In.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Delegated platform Super Admin record.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "addedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "addedBy", "createdAt"]
+    },
+    "School": {
+      "title": "School",
+      "description": "Multi-tenant school profile with configurable education levels (TK/SD/SMP/SMA) and payment modules.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "code": { "type": "string", "minLength": 2, "maxLength": 24 },
+        "npsn": { "type": "string", "maxLength": 20 },
+        "address": { "type": "string", "maxLength": 250 },
+        "city": { "type": "string", "maxLength": 80 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "principalName": { "type": "string", "maxLength": 100 },
+        "treasurerName": { "type": "string", "maxLength": 100 },
+        "bankName": { "type": "string", "maxLength": 60 },
+        "bankAccountNumber": { "type": "string", "maxLength": 40 },
+        "bankAccountHolder": { "type": "string", "maxLength": 120 },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "enabledLevels": { "type": "array", "description": "Active school levels among TK, SD, SMP, SMA (max 4)." },
+        "enabledModules": { "type": "object", "description": "Booleans for spp, daftarUlang, jemputan." },
+        "adminEmails": { "type": "array", "description": "Authorized school finance staff emails (max 10)." },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "code", "status", "enabledLevels", "enabledModules", "adminEmails", "createdBy", "createdAt", "updatedAt"]
+    },
+    "SchoolRequest": {
+      "title": "SchoolRequest",
+      "description": "Onboarding request submitted by a school wishing to join the platform.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "city": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "contactEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "contactPhone": { "type": "string", "maxLength": 30 },
+        "bankName": { "type": "string", "maxLength": 60 },
+        "bankAccountNumber": { "type": "string", "maxLength": 40 },
+        "bankAccountHolder": { "type": "string", "maxLength": 120 },
+        "requestedLevels": { "type": "array" },
+        "requestedModules": { "type": "object" },
+        "applicantUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolName", "city", "contactEmail", "requestedLevels", "requestedModules", "applicantUid", "status", "createdAt", "updatedAt"]
+    },
+    "FeeTemplate": {
+      "title": "FeeTemplate",
+      "description": "Flexible fee configuration per school, education level, class/grade, or pickup zone.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "authorizedFinanceEmails": { "type": "array" },
+        "category": { "type": "string", "enum": ["spp", "daftar_ulang", "jemputan"] },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "level": { "type": "string", "enum": ["TK", "SD", "SMP", "SMA", "ALL"] },
+        "grade": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "amount": { "type": "number" },
+        "billingCycle": { "type": "string", "enum": ["monthly", "annual", "one_time"] },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "authorizedFinanceEmails", "category", "name", "level", "grade", "amount", "billingCycle", "isActive", "createdAt", "updatedAt"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Student and guardian record isolated per school.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "authorizedFinanceEmails": { "type": "array" },
+        "nis": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "name": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "level": { "type": "string", "enum": ["TK", "SD", "SMP", "SMA"] },
+        "grade": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "className": { "type": "string", "maxLength": 30 },
+        "parentName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "parentEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "parentPhone": { "type": "string", "maxLength": 30 },
+        "useShuttle": { "type": "boolean" },
+        "shuttleZone": { "type": "string", "maxLength": 60 },
+        "customSppAmount": { "type": "number" },
+        "customShuttleAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "graduated", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "schoolName", "authorizedFinanceEmails", "nis", "name", "level", "grade", "parentName", "parentEmail", "useShuttle", "customSppAmount", "customShuttleAmount", "status", "createdAt", "updatedAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Student fee invoice for SPP, Daftar Ulang, Jemputan, or Manual custom charges.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "authorizedFinanceEmails": { "type": "array" },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "studentName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "studentLevel": { "type": "string", "enum": ["TK", "SD", "SMP", "SMA"] },
+        "studentGrade": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "parentEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "parentName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "category": { "type": "string", "enum": ["spp", "daftar_ulang", "jemputan", "manual"] },
+        "title": { "type": "string", "minLength": 2, "maxLength": 150 },
+        "period": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number", "description": "Cumulative amount already paid for partial installments." },
+        "dueDate": { "type": "string", "minLength": 4, "maxLength": 20 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["unpaid", "pending_payment", "paid"] },
+        "paymentMethod": { "type": "string", "enum": ["none", "cash", "va", "qris", "bank_transfer"] },
+        "paymentChannel": { "type": "string", "maxLength": 60 },
+        "schoolBankName": { "type": "string", "maxLength": 60 },
+        "schoolBankAccountNumber": { "type": "string", "maxLength": 40 },
+        "schoolBankAccountHolder": { "type": "string", "maxLength": 120 },
+        "receiptNumber": { "type": "string", "maxLength": 60 },
+        "transactionId": { "type": "string", "maxLength": 128 },
+        "paidAt": { "type": "string", "maxLength": 40 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "schoolId", "schoolName", "authorizedFinanceEmails", "studentId", "studentNis", "studentName", "studentLevel", "studentGrade", "parentEmail", "parentName", "category", "title", "period", "amount", "dueDate", "status", "paymentMethod", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Payment ledger record across Cash Cashier, Virtual Account, and QRIS.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "schoolName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "authorizedFinanceEmails": { "type": "array" },
+        "studentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "studentNis": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "studentName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "studentLevel": { "type": "string", "enum": ["TK", "SD", "SMP", "SMA"] },
+        "studentGrade": { "type": "string", "minLength": 1, "maxLength": 30 },
+        "parentEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "parentName": { "type": "string", "minLength": 2, "maxLength": 120 },
+        "invoiceIds": { "type": "array" },
+        "invoiceTitles": { "type": "array" },
+        "categories": { "type": "array" },
+        "totalAmount": { "type": "number" },
+        "method": { "type": "string", "enum": ["cash", "va", "qris", "bank_transfer"] },
+        "channelDetail": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "vaNumber": { "type": "string", "maxLength": 40 },
+        "vaBillerCode": { "type": "string", "maxLength": 30 },
+        "qrisPayload": { "type": "string", "maxLength": 1000 },
+        "bankName": { "type": "string", "maxLength": 60 },
+        "bankAccountNumber": { "type": "string", "maxLength": 40 },
+        "bankAccountHolder": { "type": "string", "maxLength": 120 },
+        "transferSenderName": { "type": "string", "maxLength": 120 },
+        "transferReference": { "type": "string", "maxLength": 120 },
+        "transferProofDataUrl": { "type": "string", "maxLength": 200000, "description": "Compressed base64 JPEG proof of bank transfer receipt." },
+        "gatewayProvider": { "type": "string", "maxLength": 30 },
+        "gatewayOrderId": { "type": "string", "maxLength": 80 },
+        "gatewayTransactionId": { "type": "string", "maxLength": 100 },
+        "expiresAt": { "type": "string", "maxLength": 40 },
+        "receiptNumber": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "notes": { "type": "string", "maxLength": 300 },
+        "status": { "type": "string", "enum": ["pending", "settled", "cancelled"] },
+        "payerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "payerEmail": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "settledByUid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "settledAt": { "type": "string", "maxLength": 40 }
+      },
+      "required": ["id", "schoolId", "schoolName", "authorizedFinanceEmails", "studentId", "studentNis", "studentName", "studentLevel", "studentGrade", "parentEmail", "parentName", "invoiceIds", "invoiceTitles", "categories", "totalAmount", "method", "channelDetail", "receiptNumber", "status", "payerUid", "payerEmail", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles restricted to owner and super admin."
+    },
+    "/admins/{userId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Platform super admins managed strictly by super admins."
+    },
+    "/schools/{schoolId}": {
+      "schema": { "$ref": "#/entities/School" },
+      "description": "Multi-tenant schools configured by Super Admin and their assigned finance admins."
+    },
+    "/schoolRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/SchoolRequest" },
+      "description": "Onboarding requests for new schools."
+    },
+    "/feeTemplates/{templateId}": {
+      "schema": { "$ref": "#/entities/FeeTemplate" },
+      "description": "Flexible fee rates per school, education level, grade, or shuttle zone."
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Enrolled students linked to schoolId and parentEmail."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Student billing records for SPP, Daftar Ulang, Jemputan, and Manual fees."
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Settlement and payment records for Cash, Virtual Account, and QRIS."
+    }
+  }
+}

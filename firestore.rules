@@ -1,0 +1,662 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pillar 0: Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Global Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function emailVerified() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email is string
+        && request.auth.token.email.size() >= 3
+        && request.auth.token.email.size() <= 120;
+    }
+
+    function authEmail() {
+      return request.auth.token.email;
+    }
+
+    function isSuperAdminByEmail() {
+      return emailVerified() && authEmail() == 'topanmuhammadderajat@gmail.com';
+    }
+
+    function isSuperAdmin() {
+      return isSuperAdminByEmail()
+        || (emailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidEmailArray(arr, maxLen) {
+      return arr is list
+        && arr.size() >= 1
+        && arr.size() <= maxLen
+        && arr[0] is string
+        && arr[0].size() >= 3
+        && arr[0].size() <= 120;
+    }
+
+    function isValidStringArray(arr, maxLen, itemMax) {
+      return arr is list
+        && arr.size() >= 1
+        && arr.size() <= maxLen
+        && arr[0] is string
+        && arr[0].size() >= 1
+        && arr[0].size() <= itemMax;
+    }
+
+    function isSchoolFinanceFor(schoolId) {
+      return emailVerified()
+        && exists(/databases/$(database)/documents/schools/$(schoolId))
+        && authEmail() in get(/databases/$(database)/documents/schools/$(schoolId)).data.adminEmails;
+    }
+
+    // --- Validation Blueprints (Pillar 2) ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'photoURL', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidAdmin(data) {
+      return data.keys().hasAll(['uid', 'email', 'addedBy', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'addedBy', 'createdAt'])
+        && isValidId(data.uid)
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 120
+        && data.addedBy is string && data.addedBy.size() >= 1 && data.addedBy.size() <= 128
+        && data.createdAt is timestamp;
+    }
+
+    function isValidModulesMap(m) {
+      return m is map
+        && m.keys().hasAll(['spp', 'daftarUlang', 'jemputan'])
+        && m.keys().hasOnly(['spp', 'daftarUlang', 'jemputan'])
+        && m.spp is bool
+        && m.daftarUlang is bool
+        && m.jemputan is bool;
+    }
+
+    function isValidSchool(data) {
+      return data.keys().hasAll([
+          'id', 'name', 'code', 'status', 'enabledLevels', 'enabledModules',
+          'adminEmails', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'name', 'code', 'npsn', 'address', 'city', 'phone',
+          'principalName', 'treasurerName', 'bankName', 'bankAccountNumber',
+          'bankAccountHolder', 'status', 'enabledLevels',
+          'enabledModules', 'adminEmails', 'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.code is string && data.code.size() >= 2 && data.code.size() <= 24
+        && (!('npsn' in data) || (data.npsn is string && data.npsn.size() <= 20))
+        && (!('address' in data) || (data.address is string && data.address.size() <= 250))
+        && (!('city' in data) || (data.city is string && data.city.size() <= 80))
+        && (!('phone' in data) || (data.phone is string && data.phone.size() <= 30))
+        && (!('principalName' in data) || (data.principalName is string && data.principalName.size() <= 100))
+        && (!('treasurerName' in data) || (data.treasurerName is string && data.treasurerName.size() <= 100))
+        && (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 60))
+        && (!('bankAccountNumber' in data) || (data.bankAccountNumber is string && data.bankAccountNumber.size() <= 40))
+        && (!('bankAccountHolder' in data) || (data.bankAccountHolder is string && data.bankAccountHolder.size() <= 120))
+        && data.status in ['active', 'inactive']
+        && data.enabledLevels is list
+        && data.enabledLevels.size() >= 1 && data.enabledLevels.size() <= 4
+        && data.enabledLevels.hasOnly(['TK', 'SD', 'SMP', 'SMA'])
+        && isValidModulesMap(data.enabledModules)
+        && isValidEmailArray(data.adminEmails, 10)
+        && data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidSchoolRequest(data) {
+      return data.keys().hasAll([
+          'id', 'schoolName', 'city', 'contactEmail', 'requestedLevels',
+          'requestedModules', 'applicantUid', 'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'schoolName', 'city', 'contactEmail', 'contactPhone',
+          'bankName', 'bankAccountNumber', 'bankAccountHolder',
+          'requestedLevels', 'requestedModules', 'applicantUid', 'status',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120
+        && data.city is string && data.city.size() >= 2 && data.city.size() <= 80
+        && data.contactEmail is string && data.contactEmail.size() >= 3 && data.contactEmail.size() <= 120
+        && (!('contactPhone' in data) || (data.contactPhone is string && data.contactPhone.size() <= 30))
+        && (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 60))
+        && (!('bankAccountNumber' in data) || (data.bankAccountNumber is string && data.bankAccountNumber.size() <= 40))
+        && (!('bankAccountHolder' in data) || (data.bankAccountHolder is string && data.bankAccountHolder.size() <= 120))
+        && data.requestedLevels is list
+        && data.requestedLevels.size() >= 1 && data.requestedLevels.size() <= 4
+        && data.requestedLevels.hasOnly(['TK', 'SD', 'SMP', 'SMA'])
+        && isValidModulesMap(data.requestedModules)
+        && isValidId(data.applicantUid)
+        && data.status in ['pending', 'approved', 'rejected']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidFeeTemplate(data) {
+      return data.keys().hasAll([
+          'id', 'schoolId', 'authorizedFinanceEmails', 'category', 'name',
+          'level', 'grade', 'amount', 'billingCycle', 'isActive',
+          'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'schoolId', 'authorizedFinanceEmails', 'category', 'name',
+          'level', 'grade', 'amount', 'billingCycle', 'isActive',
+          'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.schoolId)
+        && isValidEmailArray(data.authorizedFinanceEmails, 10)
+        && data.category in ['spp', 'daftar_ulang', 'jemputan']
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.level in ['TK', 'SD', 'SMP', 'SMA', 'ALL']
+        && data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 40
+        && data.amount is number && data.amount >= 0 && data.amount <= 1000000000
+        && data.billingCycle in ['monthly', 'annual', 'one_time']
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails', 'nis',
+          'name', 'level', 'grade', 'parentName', 'parentEmail',
+          'useShuttle', 'customSppAmount', 'customShuttleAmount',
+          'status', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails', 'nis',
+          'name', 'level', 'grade', 'className', 'parentName', 'parentEmail',
+          'parentPhone', 'useShuttle', 'shuttleZone', 'customSppAmount',
+          'customShuttleAmount', 'status', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.schoolId)
+        && data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120
+        && isValidEmailArray(data.authorizedFinanceEmails, 10)
+        && data.nis is string && data.nis.size() >= 1 && data.nis.size() <= 30
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 120
+        && data.level in ['TK', 'SD', 'SMP', 'SMA']
+        && data.grade is string && data.grade.size() >= 1 && data.grade.size() <= 30
+        && (!('className' in data) || (data.className is string && data.className.size() <= 30))
+        && data.parentName is string && data.parentName.size() >= 2 && data.parentName.size() <= 120
+        && data.parentEmail is string && data.parentEmail.size() >= 3 && data.parentEmail.size() <= 120
+        && (!('parentPhone' in data) || (data.parentPhone is string && data.parentPhone.size() <= 30))
+        && data.useShuttle is bool
+        && (!('shuttleZone' in data) || (data.shuttleZone is string && data.shuttleZone.size() <= 60))
+        && data.customSppAmount is number && data.customSppAmount >= 0 && data.customSppAmount <= 1000000000
+        && data.customShuttleAmount is number && data.customShuttleAmount >= 0 && data.customShuttleAmount <= 1000000000
+        && data.status in ['active', 'graduated', 'inactive']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails',
+          'studentId', 'studentNis', 'studentName', 'studentLevel', 'studentGrade',
+          'parentEmail', 'parentName', 'category', 'title', 'period',
+          'amount', 'dueDate', 'status', 'paymentMethod',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails',
+          'studentId', 'studentNis', 'studentName', 'studentLevel', 'studentGrade',
+          'parentEmail', 'parentName', 'category', 'title', 'period',
+          'amount', 'paidAmount', 'dueDate', 'notes', 'status', 'paymentMethod',
+          'paymentChannel', 'schoolBankName', 'schoolBankAccountNumber',
+          'schoolBankAccountHolder', 'receiptNumber', 'transactionId', 'paidAt',
+          'createdBy', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.schoolId)
+        && data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120
+        && isValidEmailArray(data.authorizedFinanceEmails, 10)
+        && isValidId(data.studentId)
+        && data.studentNis is string && data.studentNis.size() >= 1 && data.studentNis.size() <= 30
+        && data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 120
+        && data.studentLevel in ['TK', 'SD', 'SMP', 'SMA']
+        && data.studentGrade is string && data.studentGrade.size() >= 1 && data.studentGrade.size() <= 30
+        && data.parentEmail is string && data.parentEmail.size() >= 3 && data.parentEmail.size() <= 120
+        && data.parentName is string && data.parentName.size() >= 2 && data.parentName.size() <= 120
+        && data.category in ['spp', 'daftar_ulang', 'jemputan', 'manual']
+        && data.title is string && data.title.size() >= 2 && data.title.size() <= 150
+        && data.period is string && data.period.size() >= 1 && data.period.size() <= 40
+        && data.amount is number && data.amount > 0 && data.amount <= 1000000000
+        && (!('paidAmount' in data) || (data.paidAmount is number && data.paidAmount >= 0 && data.paidAmount <= data.amount))
+        && data.dueDate is string && data.dueDate.size() >= 4 && data.dueDate.size() <= 20
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.status in ['unpaid', 'pending_payment', 'paid']
+        && data.paymentMethod in ['none', 'cash', 'va', 'qris', 'bank_transfer']
+        && (!('paymentChannel' in data) || (data.paymentChannel is string && data.paymentChannel.size() <= 60))
+        && (!('schoolBankName' in data) || (data.schoolBankName is string && data.schoolBankName.size() <= 60))
+        && (!('schoolBankAccountNumber' in data) || (data.schoolBankAccountNumber is string && data.schoolBankAccountNumber.size() <= 40))
+        && (!('schoolBankAccountHolder' in data) || (data.schoolBankAccountHolder is string && data.schoolBankAccountHolder.size() <= 120))
+        && (!('receiptNumber' in data) || (data.receiptNumber is string && data.receiptNumber.size() <= 60))
+        && (!('transactionId' in data) || (data.transactionId is string && data.transactionId.size() <= 128))
+        && (!('paidAt' in data) || (data.paidAt is string && data.paidAt.size() <= 40))
+        && isValidId(data.createdBy)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails',
+          'studentId', 'studentNis', 'studentName', 'studentLevel', 'studentGrade',
+          'parentEmail', 'parentName', 'invoiceIds', 'invoiceTitles', 'categories',
+          'totalAmount', 'method', 'channelDetail', 'receiptNumber',
+          'status', 'payerUid', 'payerEmail', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'id', 'schoolId', 'schoolName', 'authorizedFinanceEmails',
+          'studentId', 'studentNis', 'studentName', 'studentLevel', 'studentGrade',
+          'parentEmail', 'parentName', 'invoiceIds', 'invoiceTitles', 'categories',
+          'totalAmount', 'method', 'channelDetail', 'vaNumber', 'vaBillerCode',
+          'qrisPayload', 'bankName', 'bankAccountNumber', 'bankAccountHolder',
+          'transferSenderName', 'transferReference', 'transferProofDataUrl',
+          'gatewayProvider', 'gatewayOrderId', 'gatewayTransactionId', 'expiresAt',
+          'receiptNumber', 'notes', 'status', 'payerUid', 'payerEmail',
+          'settledByUid', 'createdAt', 'updatedAt', 'settledAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.schoolId)
+        && data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120
+        && isValidEmailArray(data.authorizedFinanceEmails, 10)
+        && isValidId(data.studentId)
+        && data.studentNis is string && data.studentNis.size() >= 1 && data.studentNis.size() <= 30
+        && data.studentName is string && data.studentName.size() >= 2 && data.studentName.size() <= 120
+        && data.studentLevel in ['TK', 'SD', 'SMP', 'SMA']
+        && data.studentGrade is string && data.studentGrade.size() >= 1 && data.studentGrade.size() <= 30
+        && data.parentEmail is string && data.parentEmail.size() >= 3 && data.parentEmail.size() <= 120
+        && data.parentName is string && data.parentName.size() >= 2 && data.parentName.size() <= 120
+        && isValidStringArray(data.invoiceIds, 20, 128)
+        && isValidStringArray(data.invoiceTitles, 20, 150)
+        && isValidStringArray(data.categories, 20, 30)
+        && data.totalAmount is number && data.totalAmount > 0 && data.totalAmount <= 2000000000
+        && data.method in ['cash', 'va', 'qris', 'bank_transfer']
+        && data.channelDetail is string && data.channelDetail.size() >= 2 && data.channelDetail.size() <= 80
+        && (!('vaNumber' in data) || (data.vaNumber is string && data.vaNumber.size() <= 40))
+        && (!('vaBillerCode' in data) || (data.vaBillerCode is string && data.vaBillerCode.size() <= 30))
+        && (!('qrisPayload' in data) || (data.qrisPayload is string && data.qrisPayload.size() <= 1000))
+        && (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 60))
+        && (!('bankAccountNumber' in data) || (data.bankAccountNumber is string && data.bankAccountNumber.size() <= 40))
+        && (!('bankAccountHolder' in data) || (data.bankAccountHolder is string && data.bankAccountHolder.size() <= 120))
+        && (!('transferSenderName' in data) || (data.transferSenderName is string && data.transferSenderName.size() <= 120))
+        && (!('transferReference' in data) || (data.transferReference is string && data.transferReference.size() <= 120))
+        && (!('transferProofDataUrl' in data) || (data.transferProofDataUrl is string && data.transferProofDataUrl.size() <= 200000 && (data.transferProofDataUrl == '' || data.transferProofDataUrl.matches('^data:image/(png|jpeg|jpg|webp);base64,[a-zA-Z0-9+/=]+$'))))
+        && (!('gatewayProvider' in data) || (data.gatewayProvider is string && data.gatewayProvider.size() <= 30))
+        && (!('gatewayOrderId' in data) || (data.gatewayOrderId is string && data.gatewayOrderId.size() <= 80))
+        && (!('gatewayTransactionId' in data) || (data.gatewayTransactionId is string && data.gatewayTransactionId.size() <= 100))
+        && (!('expiresAt' in data) || (data.expiresAt is string && data.expiresAt.size() <= 40))
+        && data.receiptNumber is string && data.receiptNumber.size() >= 2 && data.receiptNumber.size() <= 60
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 300))
+        && data.status in ['pending', 'settled', 'cancelled']
+        && isValidId(data.payerUid)
+        && data.payerEmail is string && data.payerEmail.size() >= 3 && data.payerEmail.size() <= 120
+        && (!('settledByUid' in data) || (data.settledByUid is string && data.settledByUid.size() <= 128))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (!('settledAt' in data) || (data.settledAt is string && data.settledAt.size() <= 40));
+    }
+
+    // --- Collection Rules ---
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && emailVerified() && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSuperAdminByEmail();
+      allow create: if isValidId(userId) && emailVerified()
+        && request.auth.uid == userId
+        && isValidUser(incoming())
+        && incoming().uid == userId
+        && incoming().email == authEmail()
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(userId) && emailVerified()
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (request.auth.uid == userId && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt']))
+        );
+      allow delete: if isValidId(userId) && isSuperAdmin();
+    }
+
+    match /admins/{userId} {
+      allow get: if isValidId(userId) && emailVerified() && (request.auth.uid == userId || isSuperAdmin());
+      allow list: if isSuperAdminByEmail();
+      allow create: if isValidId(userId) && isSuperAdmin()
+        && isValidAdmin(incoming())
+        && incoming().uid == userId
+        && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(userId) && isSuperAdmin();
+    }
+
+    match /schools/{schoolId} {
+      allow get: if isValidId(schoolId) && emailVerified()
+        && (isSuperAdmin() || authEmail() in existing().adminEmails);
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && authEmail() in existing().adminEmails);
+      allow create: if isValidId(schoolId) && isSuperAdmin()
+        && isValidSchool(incoming())
+        && incoming().id == schoolId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(schoolId) && emailVerified()
+        && isValidSchool(incoming())
+        && incoming().id == existing().id
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (
+            authEmail() in existing().adminEmails
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'name', 'npsn', 'address', 'city', 'phone',
+              'principalName', 'treasurerName', 'bankName',
+              'bankAccountNumber', 'bankAccountHolder',
+              'enabledLevels', 'enabledModules', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(schoolId) && isSuperAdmin();
+    }
+
+    match /schoolRequests/{requestId} {
+      allow get: if isValidId(requestId) && emailVerified()
+        && (isSuperAdmin() || existing().applicantUid == request.auth.uid);
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && existing().applicantUid == request.auth.uid);
+      allow create: if isValidId(requestId) && emailVerified()
+        && isValidSchoolRequest(incoming())
+        && incoming().id == requestId
+        && incoming().applicantUid == request.auth.uid
+        && incoming().status == 'pending'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(requestId) && isSuperAdmin()
+        && isValidSchoolRequest(incoming())
+        && incoming().id == existing().id
+        && incoming().applicantUid == existing().applicantUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isValidId(requestId) && isSuperAdmin();
+    }
+
+    match /feeTemplates/{templateId} {
+      allow get: if isValidId(templateId) && emailVerified()
+        && (isSuperAdmin() || authEmail() in existing().authorizedFinanceEmails);
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && authEmail() in existing().authorizedFinanceEmails);
+      allow create: if isValidId(templateId) && emailVerified()
+        && isValidFeeTemplate(incoming())
+        && incoming().id == templateId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (isSuperAdmin() || isSchoolFinanceFor(incoming().schoolId));
+      allow update: if isValidId(templateId) && emailVerified()
+        && isValidFeeTemplate(incoming())
+        && incoming().id == existing().id
+        && incoming().schoolId == existing().schoolId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (
+            isSchoolFinanceFor(existing().schoolId)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'category', 'name', 'level', 'grade', 'amount',
+              'billingCycle', 'isActive', 'authorizedFinanceEmails', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(templateId) && emailVerified()
+        && (isSuperAdmin() || isSchoolFinanceFor(existing().schoolId));
+    }
+
+    match /students/{studentId} {
+      allow get: if isValidId(studentId) && emailVerified()
+        && (
+          isSuperAdmin()
+          || authEmail() in existing().authorizedFinanceEmails
+          || existing().parentEmail == authEmail()
+        );
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && authEmail() in existing().authorizedFinanceEmails)
+        || (emailVerified() && existing().parentEmail == authEmail());
+      allow create: if isValidId(studentId) && emailVerified()
+        && isValidStudent(incoming())
+        && incoming().id == studentId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/schools/$(incoming().schoolId))
+        && (isSuperAdmin() || isSchoolFinanceFor(incoming().schoolId));
+      allow update: if isValidId(studentId) && emailVerified()
+        && isValidStudent(incoming())
+        && incoming().id == existing().id
+        && incoming().schoolId == existing().schoolId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (
+            isSchoolFinanceFor(existing().schoolId)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'nis', 'name', 'level', 'grade', 'className',
+              'parentName', 'parentEmail', 'parentPhone',
+              'useShuttle', 'shuttleZone', 'customSppAmount',
+              'customShuttleAmount', 'status', 'schoolName',
+              'authorizedFinanceEmails', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(studentId) && emailVerified()
+        && (isSuperAdmin() || isSchoolFinanceFor(existing().schoolId));
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isValidId(invoiceId) && emailVerified()
+        && (
+          isSuperAdmin()
+          || authEmail() in existing().authorizedFinanceEmails
+          || existing().parentEmail == authEmail()
+        );
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && authEmail() in existing().authorizedFinanceEmails)
+        || (emailVerified() && existing().parentEmail == authEmail());
+      allow create: if isValidId(invoiceId) && emailVerified()
+        && isValidInvoice(incoming())
+        && incoming().id == invoiceId
+        && incoming().createdBy == request.auth.uid
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/schools/$(incoming().schoolId))
+        && existsAfter(/databases/$(database)/documents/students/$(incoming().studentId))
+        && (isSuperAdmin() || isSchoolFinanceFor(incoming().schoolId));
+      allow update: if isValidId(invoiceId) && emailVerified()
+        && isValidInvoice(incoming())
+        && incoming().id == existing().id
+        && incoming().schoolId == existing().schoolId
+        && incoming().studentId == existing().studentId
+        && incoming().createdBy == existing().createdBy
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (
+            isSchoolFinanceFor(existing().schoolId)
+            && existing().status != 'paid'
+            && (existing().status == 'unpaid' || incoming().amount == existing().amount)
+            && (!('paidAmount' in existing()) || incoming().amount >= existing().paidAmount)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'title', 'period', 'amount', 'dueDate', 'notes',
+              'authorizedFinanceEmails', 'parentEmail', 'parentName',
+              'studentName', 'studentNis', 'studentLevel', 'studentGrade',
+              'schoolBankName', 'schoolBankAccountNumber',
+              'schoolBankAccountHolder', 'updatedAt'
+            ])
+          )
+          || (
+            isSchoolFinanceFor(existing().schoolId)
+            && existing().status != 'paid'
+            && incoming().status in ['unpaid', 'paid']
+            && incoming().amount == existing().amount
+            && (!('paidAmount' in existing()) || incoming().paidAmount >= existing().paidAmount)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'paidAmount', 'paymentMethod', 'paymentChannel',
+              'receiptNumber', 'transactionId', 'paidAt', 'updatedAt'
+            ])
+            && existsAfter(/databases/$(database)/documents/transactions/$(incoming().transactionId))
+            && getAfter(/databases/$(database)/documents/transactions/$(incoming().transactionId)).data.status == 'settled'
+          )
+          || (
+            (isSchoolFinanceFor(existing().schoolId) || existing().parentEmail == authEmail())
+            && existing().status == 'unpaid'
+            && incoming().status == 'pending_payment'
+            && incoming().amount == existing().amount
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'paymentMethod', 'paymentChannel', 'transactionId', 'updatedAt'
+            ])
+            && existsAfter(/databases/$(database)/documents/transactions/$(incoming().transactionId))
+          )
+          || (
+            (isSchoolFinanceFor(existing().schoolId) || existing().parentEmail == authEmail())
+            && existing().status == 'pending_payment'
+            && incoming().status in ['unpaid', 'paid']
+            && incoming().amount == existing().amount
+            && (!('paidAmount' in existing()) || incoming().paidAmount >= existing().paidAmount)
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'paidAmount', 'receiptNumber', 'paidAt', 'updatedAt'
+            ])
+            && getAfter(/databases/$(database)/documents/transactions/$(existing().transactionId)).data.status == 'settled'
+          )
+          || (
+            (isSchoolFinanceFor(existing().schoolId) || existing().parentEmail == authEmail())
+            && existing().status == 'pending_payment'
+            && incoming().status == 'unpaid'
+            && incoming().amount == existing().amount
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'paymentMethod', 'paymentChannel', 'transactionId', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(invoiceId) && emailVerified()
+        && existing().status != 'paid'
+        && (isSuperAdmin() || isSchoolFinanceFor(existing().schoolId));
+    }
+
+    match /transactions/{txId} {
+      allow get: if isValidId(txId) && emailVerified()
+        && (
+          isSuperAdmin()
+          || authEmail() in existing().authorizedFinanceEmails
+          || existing().parentEmail == authEmail()
+        );
+      allow list: if isSuperAdminByEmail()
+        || (emailVerified() && authEmail() in existing().authorizedFinanceEmails)
+        || (emailVerified() && existing().parentEmail == authEmail());
+      allow create: if isValidId(txId) && emailVerified()
+        && isValidTransaction(incoming())
+        && incoming().id == txId
+        && incoming().payerUid == request.auth.uid
+        && incoming().payerEmail == authEmail()
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && existsAfter(/databases/$(database)/documents/schools/$(incoming().schoolId))
+        && existsAfter(/databases/$(database)/documents/invoices/$(incoming().invoiceIds[0]))
+        && (
+          isSuperAdmin()
+          || isSchoolFinanceFor(incoming().schoolId)
+          || (
+            incoming().parentEmail == authEmail()
+            && incoming().status == 'pending'
+            && incoming().method in ['va', 'qris', 'bank_transfer']
+          )
+        );
+      allow update: if isValidId(txId) && emailVerified()
+        && isValidTransaction(incoming())
+        && incoming().id == existing().id
+        && incoming().schoolId == existing().schoolId
+        && incoming().studentId == existing().studentId
+        && incoming().totalAmount == existing().totalAmount
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isSuperAdmin()
+          || (
+            existing().status == 'pending'
+            && incoming().status == 'settled'
+            && (
+              isSchoolFinanceFor(existing().schoolId)
+              || (existing().method in ['va', 'qris'] && existing().parentEmail == authEmail())
+            )
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'settledByUid', 'settledAt', 'updatedAt'
+            ])
+            && (
+              getAfter(/databases/$(database)/documents/invoices/$(existing().invoiceIds[0])).data.status == 'paid'
+              || getAfter(/databases/$(database)/documents/invoices/$(existing().invoiceIds[0])).data.paidAmount > 0
+            )
+          )
+          || (
+            existing().status == 'pending'
+            && incoming().status == 'pending'
+            && existing().method == 'bank_transfer'
+            && (isSchoolFinanceFor(existing().schoolId) || existing().parentEmail == authEmail())
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'transferSenderName', 'transferReference', 'transferProofDataUrl', 'notes', 'updatedAt'
+            ])
+          )
+          || (
+            existing().status == 'pending'
+            && incoming().status == 'cancelled'
+            && (isSchoolFinanceFor(existing().schoolId) || existing().parentEmail == authEmail())
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'status', 'updatedAt'
+            ])
+          )
+        );
+      allow delete: if isValidId(txId) && isSuperAdmin();
+    }
+  }
+}
